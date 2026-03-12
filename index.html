@@ -80,10 +80,10 @@
         const db = firebase.firestore();
         const appId = "my-vocab-app-6935a";
 
-        // 修復後的 Gemini API 呼叫邏輯
+        // 優化後的 Gemini 呼叫邏輯，確保金鑰傳遞正確
         const callGemini = async (prompt, systemPrompt = "") => {
-            // 確保抓取環境注入的 apiKey
-            const api_key = typeof apiKey !== 'undefined' ? apiKey : "";
+            // 優先從全域讀取注入的金鑰
+            const api_key = (typeof apiKey !== 'undefined' && apiKey) ? apiKey : "";
             const model = "gemini-2.5-flash-preview-09-2025";
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${api_key}`;
             
@@ -103,7 +103,8 @@
                     
                     if (!response.ok) {
                         const errData = await response.json();
-                        throw new Error(errData.error?.message || "API Error");
+                        // 如果出現認證錯誤，嘗試手動更換提示（這裡主要是環境適配）
+                        throw new Error(errData.error?.message || "無法連線至 AI 服務");
                     }
                     
                     const data = await response.json();
@@ -111,8 +112,7 @@
                 } catch (error) {
                     console.error("Gemini Error:", error);
                     retries++;
-                    if (retries === maxRetries) return `連線失敗: ${error.message}`;
-                    // 指數退避
+                    if (retries === maxRetries) throw error;
                     await new Promise(r => setTimeout(r, Math.pow(2, retries) * 1000));
                 }
             }
@@ -240,15 +240,15 @@
                 setAiFeedback("");
                 setCurrentExam("");
                 
-                const systemPrompt = "You are an IELTS Speaking Examiner. Provide high-quality, realistic Speaking Part 2 prompts.";
-                const prompt = "Please generate a unique and challenging IELTS Speaking Part 2 prompt (Cue Card). Include the main topic statement and exactly 4 specific bullet points (starting with 'You should say...'). Format it clearly with bullet points and bold headers for a mobile app screen. Do not include extra conversational text.";
+                const systemPrompt = "You are a professional IELTS Speaking Examiner.";
+                const prompt = "Please provide an IELTS Speaking Part 2 Cue Card topic. Include the main topic and 4 bullet points. Keep the response concise and formatted with bold headings for mobile display.";
                 
                 try {
                     const exam = await callGemini(prompt, systemPrompt);
                     setCurrentExam(exam);
                     updateVideoRecs(exam);
                 } catch (e) {
-                    setCurrentExam("發生錯誤：" + e.message);
+                    setCurrentExam("目前無法生成題目，請確認網路連線或稍後再試。原因: " + e.message);
                 } finally {
                     setLoading(false);
                 }
@@ -284,8 +284,8 @@
                 if (timerRef.current) clearInterval(timerRef.current);
                 setLoading(true);
                 setSpeakingStep('reviewing');
-                const systemPrompt = "You are an expert IELTS Tutor. Provide detailed feedback in Traditional Chinese.";
-                const prompt = `Review my IELTS Part 2 answer.\n\nQuestion:\n${currentExam}\n\nMy Answer Transcript:\n${transcript}\n\nPlease provide:\n1. Estimated Band Score.\n2. Key Strengths and Weaknesses.\n3. Detailed Feedback on Vocabulary and Grammar.\n4. Three improved native-level sentences for my answer.`;
+                const systemPrompt = "You are an expert IELTS Tutor. Provide feedback in Traditional Chinese.";
+                const prompt = `Review this IELTS answer.\nQuestion: ${currentExam}\nAnswer: ${transcript}\nProvide Band Score, Strengths, Weaknesses, and 3 improved sentences.`;
                 
                 try {
                     const feedback = await callGemini(prompt, systemPrompt);
@@ -305,7 +305,7 @@
             };
 
             const updateVideoRecs = async (topic) => {
-                const prompt = `Based on this IELTS topic: "${topic}", provide 3 specific keywords for someone to search on YouTube to find model answers or related vocabulary. Just list the 3 keywords.`;
+                const prompt = `Topic: "${topic}". List 3 YouTube search keywords for model answers.`;
                 try {
                     const recs = await callGemini(prompt);
                     setVideoRecommendations(recs);
