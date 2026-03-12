@@ -3,27 +3,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>我的雲端單字庫</title>
+    <title> English - 您的專屬英語學習平台</title>
     
-    <!-- 引入 Tailwind CSS 進行排版 -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- 引入 React 核心 -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-    
-    <!-- 引入 Babel 讓瀏覽器能看懂 React 語法 -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    
-    <!-- 引入 Firebase -->
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
     <style>
-        body { -webkit-tap-highlight-color: transparent; }
-        .modal-open { overflow: hidden; }
-        /* 平滑展開動畫 - 優化 max-height 處理長例句 */
+        :root {
+            --primary-pink: #FFD9E6;
+            --primary-pink-dark: #fbacc9;
+        }
+        body { -webkit-tap-highlight-color: transparent; background-color: #fff9fb; }
+        .bg-primary { background-color: var(--primary-pink); }
+        .text-primary { color: #d46a8f; }
+        .border-primary { border-color: var(--primary-pink); }
+        
         .expand-content {
             max-height: 0;
             overflow: hidden;
@@ -31,18 +30,68 @@
             opacity: 0;
         }
         .expanded .expand-content {
-            max-height: 1000px; /* 足夠容納超長例句 */
+            max-height: 2000px;
             opacity: 1;
+        }
+
+        .note-content b { font-weight: bold; }
+        .note-content .red-text { color: #ef4444; }
+
+        @keyframes pulse-red {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.1); opacity: 0.8; }
+        }
+        .animate-pulse-red { animation: pulse-red 1.5s infinite; }
+        
+        /* 載入動畫 */
+        .dot-flashing {
+            position: relative;
+            width: 10px;
+            height: 10px;
+            border-radius: 5px;
+            background-color: #d46a8f;
+            color: #d46a8f;
+            animation: dot-flashing 1s infinite linear alternate;
+            animation-delay: .5s;
+        }
+        .dot-flashing::before, .dot-flashing::after {
+            content: '';
+            display: inline-block;
+            position: absolute;
+            top: 0;
+        }
+        .dot-flashing::before {
+            left: -15px;
+            width: 10px;
+            height: 10px;
+            border-radius: 5px;
+            background-color: #d46a8f;
+            color: #d46a8f;
+            animation: dot-flashing 1s infinite linear alternate;
+            animation-delay: 0s;
+        }
+        .dot-flashing::after {
+            left: 15px;
+            width: 10px;
+            height: 10px;
+            border-radius: 5px;
+            background-color: #d46a8f;
+            color: #d46a8f;
+            animation: dot-flashing 1s infinite linear alternate;
+            animation-delay: 1s;
+        }
+        @keyframes dot-flashing {
+            0% { background-color: #d46a8f; }
+            50%, 100% { background-color: #ffd9e6; }
         }
     </style>
 </head>
-<body class="bg-slate-50 font-sans text-slate-900 pb-20">
+<body class="font-sans text-slate-800 pb-24">
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect } = React;
+        const { useState, useEffect, useRef, useMemo } = React;
 
-        // --- Firebase 設定 ---
         const firebaseConfig = {
             apiKey: "AIzaSyB5DBCI5GVeE6AR-krsXly8CsGpEq0Zucw",
             authDomain: "my-vocab-app-6935a.firebaseapp.com",
@@ -52,309 +101,513 @@
             appId: "1:200389430232:web:d54657804db03fa7ca80ad"
         };
 
-        if (!firebase.apps.length) {
-            firebase.initializeApp(firebaseConfig);
-        }
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         const auth = firebase.auth();
         const db = firebase.firestore();
-        const appRoomId = "my-vocab-app-6935a";
+        const appId = "my-vocab-app-6935a";
+        const apiKey = ""; // 執行環境會自動提供
 
-        // --- 內建圖示 ---
         const Icons = {
-            Plus: ({size=24}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>,
-            Volume2: ({size=24}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path></svg>,
-            BrainCircuit: ({size=24}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 4.5a2.5 2.5 0 0 0-4.96-.46 2.5 2.5 0 0 0-1.98 3 2.5 2.5 0 0 0-1.32 4.24 3 3 0 0 0 .34 5.58 2.5 2.5 0 0 0 2.96 3.08 2.5 2.5 0 0 0 4.91.05L12 20V4.5Z"/><path d="M16 8V5c0-1.1.9-2 2-2"/><path d="M12 13h4"/><path d="M12 18h6a2 2 0 0 1 2 2v1"/><path d="M19 6.2v.6a2 2 0 0 1-2 2h-1"/><path d="M22 13h-4"/></svg>,
-            X: ({size=24}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>,
-            Trash2: ({size=24}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>,
-            CheckCircle2: ({size=24}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>,
-            BookOpen: ({size=24}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>,
-            Loader2: ({size=24}) => <svg className="animate-spin" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg>,
-            Eye: ({size=14}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>,
-            Sparkles: ({size=16}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.912 5.813a2 2 0 001.275 1.275L21 12l-5.813 1.912a2 2 0 00-1.275 1.275L12 21l-1.912-5.813a2 2 0 00-1.275-1.275L3 12l5.813-1.912a2 2 0 001.275-1.275L12 3z"/></svg>
+            Search: ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>,
+            Mic: ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>,
+            Folder: ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>,
+            Youtube: ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.42a2.78 2.78 0 0 0-1.94 2C1 8.14 1 12 1 12s0 3.86.46 5.58a2.78 2.78 0 0 0 1.94 2C5.12 20 12 20 12 20s6.88 0 8.6-.42a2.78 2.78 0 0 0 1.94-2C23 15.86 23 12 23 12s0-3.86-.46-5.58z"></path><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02"></polygon></svg>,
+            Plus: ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>,
+            X: ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>,
+            Volume: ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path></svg>,
+            Trash: ({size=16}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>,
+            Clock: ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>,
+            Brain: ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 4.44-2.54z"></path><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-4.44-2.54z"></path></svg>
+        };
+
+        const callGemini = async (prompt, systemPrompt = "") => {
+            const model = "gemini-2.5-flash-preview-09-2025";
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+            
+            let retries = 0;
+            const maxRetries = 5;
+            
+            while (retries < maxRetries) {
+                try {
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{ parts: [{ text: prompt }] }],
+                            systemInstruction: systemPrompt ? { parts: [{ text: systemPrompt }] } : undefined
+                        })
+                    });
+                    
+                    if (!response.ok) throw new Error("API Response Error");
+                    
+                    const data = await response.json();
+                    return data.candidates?.[0]?.content?.parts?.[0]?.text || "AI 忙碌中，請稍後再試。";
+                } catch (error) {
+                    retries++;
+                    if (retries === maxRetries) return "AI 連線失敗，請檢查網路後再試。";
+                    await new Promise(r => setTimeout(r, Math.pow(2, retries) * 1000));
+                }
+            }
         };
 
         function App() {
+            const [activeTab, setActiveTab] = useState('vocab');
             const [user, setUser] = useState(null);
+            const [loading, setLoading] = useState(false);
+            
+            // 單字狀態
             const [words, setWords] = useState([]);
-            const [isLoading, setIsLoading] = useState(true);
-            const [isModalOpen, setIsModalOpen] = useState(false);
-            const [isQuizOpen, setIsQuizOpen] = useState(false);
-            const [isTranslating, setIsTranslating] = useState(false);
+            const [vocabSearch, setVocabSearch] = useState('');
             const [expandedIds, setExpandedIds] = useState(new Set());
-            
-            const [formData, setFormData] = useState({ word: '', meaning: '', note: '' });
-            
-            const [quizData, setQuizData] = useState({
-                question: null,
-                options: [],
-                selectedId: null,
-                isCorrect: null,
-                score: 0
-            });
+            const [quizMode, setQuizMode] = useState(false);
+            const [currentQuizIndex, setCurrentQuizIndex] = useState(0);
+            const [showQuizAnswer, setShowQuizAnswer] = useState(false);
 
-            const roomRef = db.collection('artifacts').doc(appRoomId).collection('public').doc('data').collection('my-room');
+            // 口說狀態
+            const [speakingStep, setSpeakingStep] = useState('idle'); 
+            const [speakingRecords, setSpeakingRecords] = useState([]);
+            const [currentExam, setCurrentExam] = useState("");
+            const [transcript, setTranscript] = useState("");
+            const [isRecording, setIsRecording] = useState(false);
+            const [timeLeft, setTimeLeft] = useState(120);
+            const [aiFeedback, setAiFeedback] = useState("");
+            const recognitionRef = useRef(null);
+            const timerRef = useRef(null);
+
+            // 筆記狀態
+            const [folders, setFolders] = useState([]);
+            const [currentFolder, setCurrentFolder] = useState(null);
+            const [isAddingFolder, setIsAddingFolder] = useState(false);
+            const [isAddingNote, setIsAddingNote] = useState(false);
+
+            const [videoRecommendations, setVideoRecommendations] = useState("");
 
             useEffect(() => {
                 auth.signInAnonymously();
-                const unsubscribeAuth = auth.onAuthStateChanged((u) => setUser(u));
-                const unsubscribeData = roomRef.orderBy('createdAt', 'desc').onSnapshot((snapshot) => {
-                    const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    setWords(data);
-                    setIsLoading(false);
-                });
-                return () => {
-                    unsubscribeAuth();
-                    unsubscribeData();
-                };
+                const unsubAuth = auth.onAuthStateChanged(u => setUser(u));
+                
+                const unsubWords = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('my-room')
+                    .orderBy('createdAt', 'desc').onSnapshot(snap => {
+                        setWords(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                    });
+
+                const unsubSpeak = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('speaking-records')
+                    .orderBy('createdAt', 'desc').onSnapshot(snap => {
+                        setSpeakingRecords(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                    });
+
+                const unsubFolders = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('notes-folders')
+                    .onSnapshot(snap => {
+                        setFolders(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                    });
+
+                return () => { unsubAuth(); unsubWords(); unsubSpeak(); unsubFolders(); };
             }, []);
 
-            // --- 自動翻譯功能 ---
-            const autoTranslate = async (word) => {
-                if (!word || word.length < 2) return;
-                setIsTranslating(true);
-                try {
-                    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=zh-TW&dt=t&q=${encodeURIComponent(word)}`;
-                    const res = await fetch(url);
-                    const data = await res.json();
-                    if (data && data[0] && data[0][0]) {
-                        setFormData(prev => ({ ...prev, meaning: data[0][0][0] }));
-                    }
-                } catch (err) {
-                    console.error("Translation failed", err);
-                } finally {
-                    setIsTranslating(false);
+            useEffect(() => {
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                if (SpeechRecognition) {
+                    recognitionRef.current = new SpeechRecognition();
+                    recognitionRef.current.continuous = true;
+                    recognitionRef.current.interimResults = true;
+                    recognitionRef.current.lang = 'en-US';
+                    recognitionRef.current.onresult = (event) => {
+                        let final = "";
+                        for (let i = 0; i < event.results.length; i++) {
+                            final += event.results[i][0].transcript;
+                        }
+                        setTranscript(final);
+                    };
+                }
+            }, []);
+
+            // --- 單字測驗 ---
+            const startQuiz = () => {
+                if (words.length === 0) return;
+                setQuizMode(true);
+                setCurrentQuizIndex(0);
+                setShowQuizAnswer(false);
+            };
+
+            const nextQuiz = () => {
+                if (currentQuizIndex < words.length - 1) {
+                    setCurrentQuizIndex(currentQuizIndex + 1);
+                    setShowQuizAnswer(false);
+                } else {
+                    setQuizMode(false);
                 }
             };
 
-            const toggleExpand = (id) => {
-                const newSet = new Set(expandedIds);
-                if (newSet.has(id)) newSet.delete(id);
-                else newSet.add(id);
-                setExpandedIds(newSet);
+            // --- 口說功能 ---
+            const startExam = async () => {
+                setLoading(true);
+                setSpeakingStep('practicing');
+                setTranscript("");
+                setAiFeedback("");
+                setCurrentExam("");
+                
+                const systemPrompt = "You are an IELTS Speaking Examiner. Provide high-quality Speaking Part 2 prompts.";
+                const prompt = "Generate a new IELTS Speaking Part 2 prompt. Include the main topic and 4 bullet points. Format it clearly.";
+                
+                const exam = await callGemini(prompt, systemPrompt);
+                setCurrentExam(exam);
+                setLoading(false);
+                updateVideoRecs(exam);
             };
 
-            const speak = (e, text) => {
-                if (e) e.stopPropagation();
-                const ut = new SpeechSynthesisUtterance(text);
-                ut.lang = 'en-US';
-                ut.rate = 0.9;
-                window.speechSynthesis.cancel();
-                window.speechSynthesis.speak(ut);
+            const startCountdown = () => {
+                setTimeLeft(120);
+                if (timerRef.current) clearInterval(timerRef.current);
+                timerRef.current = setInterval(() => {
+                    setTimeLeft(prev => {
+                        if (prev <= 1) {
+                            clearInterval(timerRef.current);
+                            return 0;
+                        }
+                        return prev - 1;
+                    });
+                }, 1000);
             };
 
-            const startNewQuiz = () => {
-                const validWords = words.filter(w => w.meaning && w.meaning.trim() !== "");
-                if (validWords.length < 4) {
-                    alert("至少需要 4 個有中文定義的單字才能開始測驗喔！");
-                    return;
+            const toggleRecording = () => {
+                if (!isRecording) {
+                    recognitionRef.current?.start();
+                    setIsRecording(true);
+                    startCountdown();
+                } else {
+                    recognitionRef.current?.stop();
+                    setIsRecording(false);
+                    if (timerRef.current) clearInterval(timerRef.current);
                 }
-                const correctWord = validWords[Math.floor(Math.random() * validWords.length)];
-                const others = validWords.filter(w => w.id !== correctWord.id).sort(() => 0.5 - Math.random()).slice(0, 3);
-                const options = [correctWord, ...others].sort(() => 0.5 - Math.random());
-                setQuizData({ ...quizData, question: correctWord, options: options, selectedId: null, isCorrect: null });
-                setIsQuizOpen(true);
             };
 
-            const handleAnswer = (selected) => {
-                if (quizData.selectedId) return; 
-                const correct = selected.id === quizData.question.id;
-                setQuizData({ ...quizData, selectedId: selected.id, isCorrect: correct, score: correct ? quizData.score + 1 : quizData.score });
-                if (correct) speak(null, quizData.question.word);
-                setTimeout(() => { startNewQuiz(); }, 1500);
-            };
-
-            const handleSave = async (e) => {
-                e.preventDefault();
-                if (!formData.word) return;
-                const docId = Date.now().toString();
-                await roomRef.doc(docId).set({ 
-                    ...formData, 
-                    meaning: formData.meaning || "(未設定)", 
-                    createdAt: Date.now() 
+            const submitExam = async () => {
+                if (timerRef.current) clearInterval(timerRef.current);
+                setLoading(true);
+                setSpeakingStep('reviewing');
+                const systemPrompt = "You are an expert IELTS Tutor. Provide detailed feedback in Traditional Chinese.";
+                const prompt = `Review my IELTS Part 2 answer.\nQuestion: ${currentExam}\nTranscript: ${transcript}\nProvide Band Score, Fluency/Vocab/Grammar feedback, and 3 native improvements.`;
+                
+                const feedback = await callGemini(prompt, systemPrompt);
+                setAiFeedback(feedback);
+                setLoading(false);
+                
+                await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('speaking-records').add({
+                    question: currentExam,
+                    answer: transcript,
+                    feedback: feedback,
+                    createdAt: Date.now()
                 });
-                setFormData({ word: '', meaning: '', note: '' });
-                setIsModalOpen(false);
             };
 
-            const handleDelete = async (e, id) => {
+            const updateVideoRecs = async (topic) => {
+                const prompt = `Based on this topic: "${topic}", recommend 3 specific search keywords for YouTube to learn related vocabulary.`;
+                const recs = await callGemini(prompt);
+                setVideoRecommendations(recs);
+            };
+
+            // --- 筆記管理 ---
+            const deleteFolder = async (id, e) => {
                 e.stopPropagation();
-                if(confirm("確定要刪除這個單字嗎？")){
-                    await roomRef.doc(id).delete();
+                if (confirm("確定要刪除整個資料夾嗎？")) {
+                    await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('notes-folders').doc(id).delete();
+                    if (currentFolder?.id === id) setCurrentFolder(null);
                 }
             };
+
+            const deleteNote = async (folderId, noteId) => {
+                if (confirm("確定要刪除這則筆記嗎？")) {
+                    const folder = folders.find(f => f.id === folderId);
+                    const newNotes = folder.notes.filter(n => n.id !== noteId);
+                    await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('notes-folders').doc(folderId).update({
+                        notes: newNotes
+                    });
+                }
+            };
+
+            const addFolder = async (name) => {
+                if (!name) return;
+                await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('notes-folders').add({
+                    name, notes: [], createdAt: Date.now()
+                });
+                setIsAddingFolder(false);
+            };
+
+            const addNoteToFolder = async (folderId, title, content) => {
+                const folder = folders.find(f => f.id === folderId);
+                const newNote = { id: Date.now().toString(), title, content, createdAt: Date.now() };
+                const newNotes = [newNote, ...(folder.notes || [])];
+                await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('notes-folders').doc(folderId).update({
+                    notes: newNotes
+                });
+                setIsAddingNote(false);
+            };
+
+            const formatContent = (content) => {
+                let html = content.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
+                html = html.replace(/\[r\](.*?)\[\/r\]/g, '<span class="red-text">$1</span>');
+                return html;
+            };
+
+            const filteredWords = useMemo(() => {
+                return words.filter(w => w.word.toLowerCase().includes(vocabSearch.toLowerCase()) || w.meaning.includes(vocabSearch));
+            }, [words, vocabSearch]);
+
+            const Nav = () => (
+                <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 flex justify-around items-center h-20 px-4 z-50 shadow-lg">
+                    {[
+                        { id: 'vocab', label: '單字', icon: <Icons.Volume size={22} /> },
+                        { id: 'speak', label: '口說', icon: <Icons.Mic size={22} /> },
+                        { id: 'note', label: '筆記', icon: <Icons.Folder size={22} /> },
+                        { id: 'video', label: '影片', icon: <Icons.Youtube size={22} /> }
+                    ].map(tab => (
+                        <button 
+                            key={tab.id} 
+                            onClick={() => { setActiveTab(tab.id); setQuizMode(false); }}
+                            className={`flex flex-col items-center gap-1 transition-colors ${activeTab === tab.id ? 'text-[#d46a8f]' : 'text-slate-400'}`}
+                        >
+                            {tab.icon}
+                            <span className="text-[10px] font-bold">{tab.label}</span>
+                        </button>
+                    ))}
+                </div>
+            );
 
             return (
-                <div>
-                    <nav className="bg-white/80 backdrop-blur-md sticky top-0 z-40 border-b border-slate-200 px-6 py-4 flex justify-between items-center shadow-sm">
-                        <div className="flex items-center gap-2">
-                            <div className="text-indigo-600"><Icons.BookOpen size={24} /></div>
-                            <h1 className="text-xl font-bold tracking-tight text-slate-800">我的雲端單字庫</h1>
-                        </div>
-                        <div className="flex gap-2">
-                            <button onClick={startNewQuiz} className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 active:scale-95 transition-all">
-                                <Icons.BrainCircuit size={22} />
-                            </button>
-                            <button onClick={() => setIsModalOpen(true)} className="p-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 active:scale-95 transition-all">
-                                <Icons.Plus size={22} />
-                            </button>
-                        </div>
-                    </nav>
-
-                    <main className="max-w-md mx-auto p-6 space-y-4">
-                        {isLoading ? (
-                            <div className="flex flex-col items-center justify-center py-20 text-slate-400">
-                                <Icons.Loader2 size={24} />
-                                <p className="mt-2 text-sm italic">同步雲端資料中...</p>
-                            </div>
-                        ) : words.length === 0 ? (
-                            <div className="text-center py-24 bg-white rounded-[2.5rem] border-2 border-dashed border-slate-200 text-slate-400">
-                                目前還沒有單字，點擊右上角 + 開始。
-                            </div>
-                        ) : (
-                            words.map(w => {
-                                const isExpanded = expandedIds.has(w.id);
-                                return (
-                                    <div 
-                                        key={w.id} 
-                                        onClick={() => toggleExpand(w.id)}
-                                        className={`bg-white p-6 rounded-[2rem] shadow-sm border transition-all cursor-pointer select-none
-                                            ${isExpanded ? 'border-indigo-300 ring-4 ring-indigo-50/50' : 'border-slate-100 hover:border-slate-200'}
-                                            ${isExpanded ? 'expanded' : ''}
-                                        `}
-                                    >
-                                        <div className="flex justify-between items-start">
-                                            <div className="flex-1 min-w-0">
-                                                <div className="flex items-center gap-2 flex-wrap">
-                                                    <h3 className="text-2xl font-black text-slate-800 tracking-tight break-all">{w.word}</h3>
-                                                    <button onClick={(e) => speak(e, w.word)} className="text-indigo-400 p-2 hover:bg-indigo-50 rounded-full transition-colors">
-                                                        <Icons.Volume2 size={20} />
-                                                    </button>
-                                                </div>
-                                                
-                                                {!isExpanded && (
-                                                    <div className="mt-3 inline-flex items-center gap-1.5 text-[10px] font-black text-slate-400 bg-slate-50 px-2.5 py-1 rounded-full uppercase tracking-widest">
-                                                        <Icons.Eye size={12} /> Click to reveal
-                                                    </div>
-                                                )}
-                                                
-                                                <div className="expand-content">
-                                                    <p className="text-indigo-600 font-bold text-xl mt-4 pt-4 border-t border-slate-50">{w.meaning}</p>
-                                                    {w.note && (
-                                                        <div className="mt-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                                                            <p className="text-[10px] font-black text-slate-400 mb-2 uppercase tracking-widest flex items-center gap-1">
-                                                                <Icons.Sparkles size={10} /> Note & Context
-                                                            </p>
-                                                            <p className="text-base text-slate-600 italic leading-relaxed break-words">{w.note}</p>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                            <button onClick={(e) => handleDelete(e, w.id)} className="text-slate-200 hover:text-red-400 p-2 transition-colors ml-2 shrink-0">
-                                                <Icons.Trash2 size={18} />
-                                            </button>
-                                        </div>
-                                    </div>
-                                );
-                            })
+                <div className="min-h-screen">
+                    <header className="bg-primary/30 backdrop-blur p-6 sticky top-0 z-40 border-b border-[#FFD9E6] flex justify-between items-center">
+                        <h1 className="text-2xl font-black text-[#d46a8f] tracking-tighter italic">Power English</h1>
+                        {activeTab === 'vocab' && !quizMode && (
+                            <button onClick={startQuiz} className="p-2 bg-white text-[#d46a8f] rounded-full shadow-sm"><Icons.Brain /></button>
                         )}
-                    </main>
+                    </header>
 
-                    {/* 測驗彈窗 */}
-                    {isQuizOpen && quizData.question && (
-                        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-6">
-                            <div className="bg-white w-full max-w-sm rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in-95">
-                                <div className="p-8 text-center">
-                                    <div className="flex justify-between items-center mb-6">
-                                        <span className="text-xs font-black text-indigo-500 bg-indigo-50 px-4 py-1.5 rounded-full uppercase tracking-widest">Quiz Challenge</span>
-                                        <button onClick={() => setIsQuizOpen(false)} className="p-1 hover:bg-slate-50 rounded-full"><Icons.X size={20} className="text-slate-300" /></button>
+                    <div className="max-w-xl mx-auto p-4 animate-in fade-in duration-500">
+                        {/* 1. 單字頁 */}
+                        {activeTab === 'vocab' && (
+                            quizMode ? (
+                                <div className="space-y-6">
+                                    <div className="flex justify-between items-center text-xs font-bold text-slate-400">
+                                        <span>單字測驗中...</span>
+                                        <span>{currentQuizIndex + 1} / {words.length}</span>
                                     </div>
-                                    <div className="mb-8 px-4">
-                                        <h2 className="text-4xl font-black text-slate-800 mb-2 break-all">{quizData.question.word}</h2>
-                                        <p className="text-slate-400 text-sm font-medium">Select the correct translation</p>
+                                    <div className="bg-white p-12 rounded-[3rem] shadow-xl border-2 border-[#FFD9E6] text-center space-y-8">
+                                        <h2 className="text-4xl font-black text-slate-800">{words[currentQuizIndex].word}</h2>
+                                        {showQuizAnswer ? (
+                                            <div className="animate-in zoom-in duration-300">
+                                                <p className="text-2xl font-bold text-[#d46a8f] mb-2">{words[currentQuizIndex].meaning}</p>
+                                                <p className="text-sm text-slate-400 italic">{words[currentQuizIndex].note || "無筆記"}</p>
+                                            </div>
+                                        ) : (
+                                            <button onClick={() => setShowQuizAnswer(true)} className="px-8 py-3 bg-[#FFD9E6] text-[#d46a8f] rounded-full font-bold">顯示答案</button>
+                                        )}
                                     </div>
-                                    <div className="grid gap-3">
-                                        {quizData.options.map(opt => (
-                                            <button
-                                                key={opt.id}
-                                                onClick={() => handleAnswer(opt)}
-                                                className={`w-full p-5 rounded-[1.5rem] border-2 font-bold text-left flex justify-between items-center transition-all
-                                                    ${!quizData.selectedId ? 'border-slate-100 hover:border-indigo-300 active:bg-indigo-50 hover:shadow-md' : 
-                                                    opt.id === quizData.question.id ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 
-                                                    opt.id === quizData.selectedId ? 'border-red-400 bg-red-50 text-red-600' : 'border-slate-50 opacity-50'}
-                                                `}
-                                            >
-                                                <span className="truncate pr-2">{opt.meaning}</span>
-                                                {quizData.selectedId && opt.id === quizData.question.id && <div className="text-emerald-500 shrink-0"><Icons.CheckCircle2 size={20} /></div>}
-                                            </button>
+                                    <div className="flex gap-4">
+                                        <button onClick={() => setQuizMode(false)} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-bold">結束</button>
+                                        {showQuizAnswer && (
+                                            <button onClick={nextQuiz} className="flex-2 py-4 px-10 bg-[#d46a8f] text-white rounded-2xl font-bold shadow-lg">下一題</button>
+                                        )}
+                                    </div>
+                                </div>
+                            ) : (
+                                <section className="space-y-4">
+                                    <div className="relative">
+                                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"><Icons.Search /></div>
+                                        <input 
+                                            type="text" placeholder="搜尋目前單字紀錄..."
+                                            className="w-full pl-12 pr-4 py-4 bg-white rounded-2xl border-none shadow-sm outline-none focus:ring-2 focus:ring-[#FFD9E6]"
+                                            value={vocabSearch} onChange={e => setVocabSearch(e.target.value)}
+                                        />
+                                    </div>
+                                    {filteredWords.map(w => (
+                                        <div key={w.id} onClick={() => {const s=new Set(expandedIds); if(s.has(w.id)) s.delete(w.id); else s.add(w.id); setExpandedIds(s);}}
+                                            className={`bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 transition-all ${expandedIds.has(w.id) ? 'ring-2 ring-[#FFD9E6] expanded' : ''}`}
+                                        >
+                                            <h3 className="text-xl font-black text-slate-800">{w.word}</h3>
+                                            <div className="expand-content">
+                                                <p className="mt-4 text-[#d46a8f] font-bold text-lg border-t border-slate-50 pt-4">{w.meaning}</p>
+                                                {w.note && <p className="mt-2 text-slate-500 italic text-sm bg-slate-50 p-3 rounded-xl">{w.note}</p>}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </section>
+                            )
+                        )}
+
+                        {/* 2. 口說練習 */}
+                        {activeTab === 'speak' && (
+                            <section className="space-y-6">
+                                <div className="flex gap-2 p-1 bg-white rounded-2xl shadow-sm border border-slate-100">
+                                    <button onClick={() => setSpeakingStep('idle')} className={`flex-1 py-2 rounded-xl text-xs font-bold ${speakingStep !== 'records' ? 'bg-[#FFD9E6] text-[#d46a8f]' : 'text-slate-400'}`}>練習區</button>
+                                    <button onClick={() => setSpeakingStep('records')} className={`flex-1 py-2 rounded-xl text-xs font-bold ${speakingStep === 'records' ? 'bg-[#FFD9E6] text-[#d46a8f]' : 'text-slate-400'}`}>紀錄區</button>
+                                </div>
+
+                                {speakingStep === 'records' ? (
+                                    <div className="space-y-4">
+                                        {speakingRecords.map(r => (
+                                            <div key={r.id} className="bg-white p-5 rounded-[2rem] shadow-sm border border-slate-100">
+                                                <p className="text-[10px] font-black text-slate-400 mb-2">{new Date(r.createdAt).toLocaleString()}</p>
+                                                <p className="font-bold text-slate-700 line-clamp-2 mb-3">{r.question}</p>
+                                                <div className="bg-slate-50 p-3 rounded-xl text-sm italic text-slate-500 mb-2">"{r.answer}"</div>
+                                                <div className="text-xs text-[#d46a8f] whitespace-pre-wrap">{r.feedback}</div>
+                                            </div>
                                         ))}
                                     </div>
-                                    <div className="mt-8 pt-6 border-t border-slate-100 flex justify-between items-center">
-                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Current Score</span>
-                                        <span className="text-indigo-600 font-black text-lg">{quizData.score}</span>
+                                ) : (
+                                    <div className="space-y-6">
+                                        {speakingStep === 'idle' && (
+                                            <div className="bg-white p-10 rounded-[3rem] text-center space-y-4 shadow-sm">
+                                                <div className="w-20 h-20 bg-[#FFD9E6] rounded-full flex items-center justify-center mx-auto text-[#d46a8f]"><Icons.Mic size={40} /></div>
+                                                <h2 className="text-2xl font-black">雅思口說模擬</h2>
+                                                <p className="text-slate-400 text-sm px-6">由 AI 自動出題，並提供精確轉譯與批改建議。</p>
+                                                <button onClick={startExam} disabled={loading} className="w-full py-4 bg-[#FFD9E6] text-[#d46a8f] rounded-2xl font-black shadow-lg">
+                                                    {loading ? "AI 思考中..." : "生成雅思考題"}
+                                                </button>
+                                            </div>
+                                        )}
+
+                                        {speakingStep === 'practicing' && (
+                                            <div className="space-y-4">
+                                                <div className="bg-white p-6 rounded-[2rem] shadow-sm border-2 border-[#FFD9E6] min-h-[150px] flex flex-col justify-center">
+                                                    <h3 className="text-xs font-black text-[#d46a8f] uppercase mb-4 flex items-center gap-2"><Icons.Clock size={14} /> Exam Card</h3>
+                                                    {loading ? (
+                                                        <div className="flex justify-center items-center h-20"><div className="dot-flashing"></div></div>
+                                                    ) : (
+                                                        <div className="whitespace-pre-wrap text-slate-700 leading-relaxed font-bold animate-in fade-in">{currentExam}</div>
+                                                    )}
+                                                </div>
+
+                                                <div className="bg-[#1e293b] p-6 rounded-[2rem] text-white space-y-4">
+                                                    <div className="flex justify-between items-center">
+                                                        <div className="flex items-center gap-2">
+                                                            <div className={`w-3 h-3 rounded-full ${isRecording ? 'bg-red-500 animate-pulse' : 'bg-slate-600'}`}></div>
+                                                            <span className="text-xs font-bold">
+                                                                {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
+                                                            </span>
+                                                        </div>
+                                                        <span className="text-xs font-bold text-slate-400">即時轉譯</span>
+                                                    </div>
+                                                    <div className="min-h-[100px] text-lg font-medium italic text-slate-300">{transcript || "點擊按鈕開始錄製..."}</div>
+                                                    <div className="flex justify-center">
+                                                        <button onClick={toggleRecording} className={`p-8 rounded-full transition-all ${isRecording ? 'bg-red-500 animate-pulse-red shadow-[0_0_20px_rgba(239,68,68,0.4)]' : 'bg-[#FFD9E6] text-[#d46a8f]'}`}>
+                                                            <Icons.Mic size={32} />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                <button onClick={submitExam} disabled={loading || !transcript} className="w-full py-4 bg-[#d46a8f] text-white rounded-2xl font-black shadow-lg disabled:opacity-50">
+                                                    {loading ? "批改分析中..." : "完成練習並批改"}
+                                                </button>
+                                            </div>
+                                        )}
+
+                                        {speakingStep === 'reviewing' && (
+                                            <div className="space-y-4">
+                                                <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
+                                                    <h3 className="text-xl font-black text-[#d46a8f] mb-4">AI 批改報告</h3>
+                                                    {loading ? (
+                                                        <div className="flex flex-col items-center gap-4 py-10">
+                                                            <div className="dot-flashing"></div>
+                                                            <p className="text-xs text-slate-400">正在分析您的流暢度與文法...</p>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="whitespace-pre-wrap text-sm text-slate-600 leading-relaxed animate-in slide-in-from-top-4">{aiFeedback || "無分析資料。"}</div>
+                                                    )}
+                                                    {!loading && <button onClick={() => setSpeakingStep('idle')} className="mt-6 w-full py-3 bg-slate-100 text-slate-500 rounded-xl font-bold">返回</button>}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
+                                )}
+                            </section>
+                        )}
+
+                        {/* 3. 重要筆記 */}
+                        {activeTab === 'note' && (
+                            <section className="space-y-4">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h2 className="text-xl font-black text-slate-800">
+                                        {currentFolder ? (
+                                            <button onClick={() => setCurrentFolder(null)} className="flex items-center gap-2 text-[#d46a8f]"><Icons.X size={20} /> {currentFolder.name}</button>
+                                        ) : "筆記分類"}
+                                    </h2>
+                                    <button onClick={() => currentFolder ? setIsAddingNote(true) : setIsAddingFolder(true)} className="p-3 bg-[#FFD9E6] text-[#d46a8f] rounded-full shadow-sm"><Icons.Plus /></button>
                                 </div>
-                            </div>
-                        </div>
+
+                                {!currentFolder ? (
+                                    <div className="grid grid-cols-2 gap-4">
+                                        {folders.map(f => (
+                                            <div key={f.id} onClick={() => setCurrentFolder(f)} className="relative group bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 text-center space-y-2 cursor-pointer transition-all hover:ring-2 hover:ring-[#FFD9E6]">
+                                                <button onClick={(e) => deleteFolder(f.id, e)} className="absolute top-4 right-4 text-slate-300 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"><Icons.Trash /></button>
+                                                <div className="text-[#d46a8f] mx-auto w-fit"><Icons.Folder size={40} /></div>
+                                                <p className="font-bold text-slate-700 truncate px-2">{f.name}</p>
+                                                <p className="text-[10px] text-slate-400">{(f.notes || []).length} 則內容</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="space-y-4">
+                                        {(currentFolder.notes || []).map(note => (
+                                            <div key={note.id} className="relative group bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
+                                                <button onClick={() => deleteNote(currentFolder.id, note.id)} className="absolute top-4 right-4 text-slate-300 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"><Icons.Trash /></button>
+                                                <h4 className="font-black text-lg text-slate-800 mb-2 pr-8">{note.title}</h4>
+                                                <div className="text-slate-600 text-sm leading-relaxed note-content" dangerouslySetInnerHTML={{ __html: formatContent(note.content) }} />
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </section>
+                        )}
+
+                        {/* 4. 推薦影片 */}
+                        {activeTab === 'video' && (
+                            <section className="space-y-6">
+                                <div className="bg-white p-8 rounded-[3rem] shadow-sm border border-slate-100">
+                                    <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-4"><Icons.Youtube size={32} /></div>
+                                    <h2 className="text-xl font-black mb-2">AI 學習推薦</h2>
+                                    <p className="text-slate-400 text-sm mb-6">根據您的題目，推薦 YouTube 關鍵字。</p>
+                                    <div className="bg-slate-50 p-6 rounded-2xl text-slate-700 whitespace-pre-wrap text-sm italic min-h-[100px] flex items-center">
+                                        {videoRecommendations || "完成一場口說練習後將顯示推薦。"}
+                                    </div>
+                                    <a href="https://www.youtube.com/results?search_query=IELTS+Speaking+Lesson" target="_blank" className="mt-6 block w-full py-4 bg-red-500 text-white rounded-2xl font-black text-center shadow-lg shadow-red-100">探索更多</a>
+                                </div>
+                            </section>
+                        )}
+                    </div>
+
+                    <Nav />
+
+                    {isAddingFolder && (
+                        <Modal onClose={() => setIsAddingFolder(false)} title="新建資料夾">
+                            <input id="new-folder-input" type="text" placeholder="資料夾名稱..." className="w-full p-4 bg-slate-50 rounded-2xl outline-none focus:ring-2 focus:ring-[#FFD9E6] mb-4" />
+                            <button onClick={() => addFolder(document.getElementById('new-folder-input').value)} className="w-full py-4 bg-[#FFD9E6] text-[#d46a8f] rounded-2xl font-black">建立</button>
+                        </Modal>
                     )}
 
-                    {/* 新增彈窗 */}
-                    {isModalOpen && (
-                        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
-                            <div className="bg-white w-full max-w-sm rounded-t-[3rem] sm:rounded-[3rem] shadow-2xl p-8 animate-in slide-in-from-bottom-10">
-                                <div className="flex justify-between items-center mb-6">
-                                    <h2 className="text-xl font-bold text-slate-800">加入新單字</h2>
-                                    <button onClick={() => setIsModalOpen(false)} className="p-1 hover:bg-slate-50 rounded-full"><Icons.X size={20} className="text-slate-300" /></button>
-                                </div>
-                                <form onSubmit={handleSave} className="space-y-5">
-                                    <div>
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">English Word</label>
-                                        <div className="relative">
-                                            <input 
-                                                type="text" placeholder="e.g. Resilience" autoFocus required
-                                                className="w-full p-4 bg-slate-50 border-2 border-slate-50 rounded-2xl outline-none focus:border-indigo-500/30 focus:bg-white text-lg font-black transition-all"
-                                                value={formData.word} 
-                                                onChange={e => setFormData({...formData, word: e.target.value})}
-                                                onBlur={() => autoTranslate(formData.word)}
-                                            />
-                                            {isTranslating && (
-                                                <div className="absolute right-4 top-1/2 -translate-y-1/2 text-indigo-500">
-                                                    <Icons.Loader2 size={18} />
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    <div>
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Chinese Meaning (Optional)</label>
-                                        <input 
-                                            type="text" placeholder={isTranslating ? "正在翻譯..." : "中文意思 (自動翻譯或手動輸入)"}
-                                            className="w-full p-4 bg-slate-50 border-2 border-slate-50 rounded-2xl outline-none focus:border-indigo-500/30 focus:bg-white font-bold transition-all"
-                                            value={formData.meaning} onChange={e => setFormData({...formData, meaning: e.target.value})}
-                                        />
-                                    </div>
-
-                                    <div>
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Notes & Sentences</label>
-                                        <textarea 
-                                            placeholder="補充例句或筆記..."
-                                            className="w-full p-4 bg-slate-50 border-2 border-slate-50 rounded-2xl outline-none focus:border-indigo-500/30 focus:bg-white h-32 resize-none text-sm leading-relaxed transition-all"
-                                            value={formData.note} onChange={e => setFormData({...formData, note: e.target.value})}
-                                        />
-                                    </div>
-
-                                    <button 
-                                        type="submit" 
-                                        className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-lg shadow-xl shadow-indigo-100 active:scale-95 hover:bg-indigo-700 transition-all"
-                                    >
-                                        儲存卡片
-                                    </button>
-                                </form>
+                    {isAddingNote && (
+                        <Modal onClose={() => setIsAddingNote(false)} title="新增筆記">
+                            <div className="space-y-3">
+                                <p className="text-[10px] text-slate-400 italic">支援 Markdown 粗體 (**文字**) 與 [r]紅字[/r]</p>
+                                <input id="note-title-input" type="text" placeholder="標題..." className="w-full p-4 bg-slate-50 rounded-2xl outline-none focus:ring-2 focus:ring-[#FFD9E6]" />
+                                <textarea id="note-content-input" placeholder="內容..." className="w-full p-4 bg-slate-50 rounded-2xl outline-none focus:ring-2 focus:ring-[#FFD9E6] h-40"></textarea>
+                                <button onClick={() => addNoteToFolder(currentFolder.id, document.getElementById('note-title-input').value, document.getElementById('note-content-input').value)} className="w-full py-4 bg-[#FFD9E6] text-[#d46a8f] rounded-2xl font-black">儲存</button>
                             </div>
-                        </div>
+                        </Modal>
                     )}
                 </div>
             );
         }
+
+        const Modal = ({ children, onClose, title }) => (
+            <div className="fixed inset-0 z-[60] bg-slate-900/40 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
+                <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-8 shadow-2xl animate-in slide-in-from-bottom-10">
+                    <div className="flex justify-between items-center mb-6">
+                        <h3 className="text-xl font-bold">{title}</h3>
+                        <button onClick={onClose}><Icons.X className="text-slate-300" /></button>
+                    </div>
+                    {children}
+                </div>
+            </div>
+        );
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
