@@ -80,23 +80,12 @@
         const db = firebase.firestore();
         const appId = "my-vocab-app-6935a";
 
-        const Icons = {
-            Search: ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>,
-            Mic: ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>,
-            Folder: ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>,
-            Youtube: ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.42a2.78 2.78 0 0 0-1.94 2C1 8.14 1 12 1 12s0 3.86.46 5.58a2.78 2.78 0 0 0 1.94 2C5.12 20 12 20 12 20s6.88 0 8.6-.42a2.78 2.78 0 0 0 1.94-2C23 15.86 23 12 23 12s0-3.86-.46-5.58z"></path><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02"></polygon></svg>,
-            Plus: ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>,
-            X: ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>,
-            Volume: ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path></svg>,
-            Trash: ({size=16}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>,
-            Clock: ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>,
-            Brain: ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 4.44-2.54z"></path><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-4.44-2.54z"></path></svg>
-        };
-
+        // 修復後的 Gemini API 呼叫邏輯
         const callGemini = async (prompt, systemPrompt = "") => {
-            const currentApiKey = typeof apiKey !== 'undefined' ? apiKey : "";
+            // 確保抓取環境注入的 apiKey
+            const api_key = typeof apiKey !== 'undefined' ? apiKey : "";
             const model = "gemini-2.5-flash-preview-09-2025";
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${currentApiKey}`;
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${api_key}`;
             
             let retries = 0;
             const maxRetries = 5;
@@ -123,9 +112,23 @@
                     console.error("Gemini Error:", error);
                     retries++;
                     if (retries === maxRetries) return `連線失敗: ${error.message}`;
+                    // 指數退避
                     await new Promise(r => setTimeout(r, Math.pow(2, retries) * 1000));
                 }
             }
+        };
+
+        const Icons = {
+            Search: ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>,
+            Mic: ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>,
+            Folder: ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>,
+            Youtube: ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.42a2.78 2.78 0 0 0-1.94 2C1 8.14 1 12 1 12s0 3.86.46 5.58a2.78 2.78 0 0 0 1.94 2C5.12 20 12 20 12 20s6.88 0 8.6-.42a2.78 2.78 0 0 0 1.94-2C23 15.86 23 12 23 12s0-3.86-.46-5.58z"></path><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02"></polygon></svg>,
+            Plus: ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>,
+            X: ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>,
+            Volume: ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path></svg>,
+            Trash: ({size=16}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>,
+            Clock: ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>,
+            Brain: ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 4.44-2.54z"></path><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-4.44-2.54z"></path></svg>
         };
 
         function App() {
@@ -201,9 +204,9 @@
 
             // --- 單字功能 ---
             const playPronunciation = (word) => {
-                const utterance = new SpeechSynthesisUtterance(word);
-                utterance.lang = 'en-US';
-                window.speechSynthesis.speak(utterance);
+                const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(word)}&tl=en&client=tw-ob`;
+                const audio = new Audio(url);
+                audio.play();
             };
 
             const deleteWord = async (id, e) => {
@@ -237,15 +240,15 @@
                 setAiFeedback("");
                 setCurrentExam("");
                 
-                const systemPrompt = "You are an IELTS Speaking Examiner. Provide high-quality Speaking Part 2 prompts.";
-                const prompt = "Please generate a unique IELTS Speaking Part 2 prompt right now. Include the main topic and exactly 4 bullet points. Format it clearly for a mobile app screen.";
+                const systemPrompt = "You are an IELTS Speaking Examiner. Provide high-quality, realistic Speaking Part 2 prompts.";
+                const prompt = "Please generate a unique and challenging IELTS Speaking Part 2 prompt (Cue Card). Include the main topic statement and exactly 4 specific bullet points (starting with 'You should say...'). Format it clearly with bullet points and bold headers for a mobile app screen. Do not include extra conversational text.";
                 
                 try {
                     const exam = await callGemini(prompt, systemPrompt);
                     setCurrentExam(exam);
                     updateVideoRecs(exam);
                 } catch (e) {
-                    setCurrentExam("目前無法取得題目，請確認網路連線。");
+                    setCurrentExam("發生錯誤：" + e.message);
                 } finally {
                     setLoading(false);
                 }
@@ -253,19 +256,23 @@
 
             const toggleRecording = () => {
                 if (!isRecording) {
-                    recognitionRef.current?.start();
-                    setIsRecording(true);
-                    setTimeLeft(120);
-                    if (timerRef.current) clearInterval(timerRef.current);
-                    timerRef.current = setInterval(() => {
-                        setTimeLeft(prev => {
-                            if (prev <= 1) {
-                                clearInterval(timerRef.current);
-                                return 0;
-                            }
-                            return prev - 1;
-                        });
-                    }, 1000);
+                    try {
+                        recognitionRef.current?.start();
+                        setIsRecording(true);
+                        setTimeLeft(120);
+                        if (timerRef.current) clearInterval(timerRef.current);
+                        timerRef.current = setInterval(() => {
+                            setTimeLeft(prev => {
+                                if (prev <= 1) {
+                                    clearInterval(timerRef.current);
+                                    return 0;
+                                }
+                                return prev - 1;
+                            });
+                        }, 1000);
+                    } catch (e) {
+                        console.error("Speech Recognition Error:", e);
+                    }
                 } else {
                     recognitionRef.current?.stop();
                     setIsRecording(false);
@@ -278,24 +285,33 @@
                 setLoading(true);
                 setSpeakingStep('reviewing');
                 const systemPrompt = "You are an expert IELTS Tutor. Provide detailed feedback in Traditional Chinese.";
-                const prompt = `Review my IELTS Part 2 answer.\nQuestion: ${currentExam}\nTranscript: ${transcript}\nProvide Band Score (Estimated), Fluency/Vocab/Grammar feedback, and 3 specific native-like sentence improvements.`;
+                const prompt = `Review my IELTS Part 2 answer.\n\nQuestion:\n${currentExam}\n\nMy Answer Transcript:\n${transcript}\n\nPlease provide:\n1. Estimated Band Score.\n2. Key Strengths and Weaknesses.\n3. Detailed Feedback on Vocabulary and Grammar.\n4. Three improved native-level sentences for my answer.`;
                 
-                const feedback = await callGemini(prompt, systemPrompt);
-                setAiFeedback(feedback);
-                setLoading(false);
-                
-                await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('speaking-records').add({
-                    question: currentExam,
-                    answer: transcript,
-                    feedback: feedback,
-                    createdAt: Date.now()
-                });
+                try {
+                    const feedback = await callGemini(prompt, systemPrompt);
+                    setAiFeedback(feedback);
+                    
+                    await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('speaking-records').add({
+                        question: currentExam,
+                        answer: transcript,
+                        feedback: feedback,
+                        createdAt: Date.now()
+                    });
+                } catch (e) {
+                    setAiFeedback("批改失敗：" + e.message);
+                } finally {
+                    setLoading(false);
+                }
             };
 
             const updateVideoRecs = async (topic) => {
-                const prompt = `Based on this topic: "${topic}", recommend 3 specific search keywords for YouTube to learn related vocabulary. Just list them.`;
-                const recs = await callGemini(prompt);
-                setVideoRecommendations(recs);
+                const prompt = `Based on this IELTS topic: "${topic}", provide 3 specific keywords for someone to search on YouTube to find model answers or related vocabulary. Just list the 3 keywords.`;
+                try {
+                    const recs = await callGemini(prompt);
+                    setVideoRecommendations(recs);
+                } catch (e) {
+                    setVideoRecommendations("無法載入推薦影片。");
+                }
             };
 
             // --- 筆記管理 ---
@@ -409,6 +425,7 @@
                                             </div>
                                         </div>
                                     ))}
+                                    {filteredWords.length === 0 && <div className="text-center py-20 text-slate-300 text-sm">尚未有任何單字。</div>}
                                 </section>
                             )
                         )}
@@ -431,6 +448,7 @@
                                                 <div className="text-xs text-[#d46a8f] whitespace-pre-wrap">{r.feedback}</div>
                                             </div>
                                         ))}
+                                        {speakingRecords.length === 0 && <div className="text-center py-20 text-slate-300 text-sm">無錄音紀錄。</div>}
                                     </div>
                                 ) : (
                                     <div className="space-y-6">
@@ -530,6 +548,7 @@
                                                 <div className="text-slate-600 text-sm leading-relaxed" dangerouslySetInnerHTML={{ __html: formatContent(note.content) }} />
                                             </div>
                                         ))}
+                                        {(!currentFolder.notes || currentFolder.notes.length === 0) && <div className="text-center py-20 text-slate-300 text-sm">此資料夾尚無內容。</div>}
                                     </div>
                                 )}
                             </section>
