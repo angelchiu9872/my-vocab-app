@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title> English - 您的專屬英語學習平台</title>
+    <title>Power English - 您的專屬英語學習平台</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
@@ -21,7 +21,6 @@
         body { -webkit-tap-highlight-color: transparent; background-color: #fff9fb; }
         .bg-primary { background-color: var(--primary-pink); }
         .text-primary { color: #d46a8f; }
-        .border-primary { border-color: var(--primary-pink); }
         
         .expand-content {
             max-height: 0;
@@ -34,52 +33,27 @@
             opacity: 1;
         }
 
-        .note-content b { font-weight: bold; }
-        .note-content .red-text { color: #ef4444; }
-
         @keyframes pulse-red {
             0%, 100% { transform: scale(1); opacity: 1; }
             50% { transform: scale(1.1); opacity: 0.8; }
         }
         .animate-pulse-red { animation: pulse-red 1.5s infinite; }
         
-        /* 載入動畫 */
         .dot-flashing {
             position: relative;
-            width: 10px;
-            height: 10px;
+            width: 10px; height: 10px;
             border-radius: 5px;
             background-color: #d46a8f;
-            color: #d46a8f;
             animation: dot-flashing 1s infinite linear alternate;
             animation-delay: .5s;
         }
         .dot-flashing::before, .dot-flashing::after {
-            content: '';
-            display: inline-block;
-            position: absolute;
-            top: 0;
-        }
-        .dot-flashing::before {
-            left: -15px;
-            width: 10px;
-            height: 10px;
-            border-radius: 5px;
-            background-color: #d46a8f;
-            color: #d46a8f;
+            content: ''; display: inline-block; position: absolute; top: 0;
+            width: 10px; height: 10px; border-radius: 5px; background-color: #d46a8f;
             animation: dot-flashing 1s infinite linear alternate;
-            animation-delay: 0s;
         }
-        .dot-flashing::after {
-            left: 15px;
-            width: 10px;
-            height: 10px;
-            border-radius: 5px;
-            background-color: #d46a8f;
-            color: #d46a8f;
-            animation: dot-flashing 1s infinite linear alternate;
-            animation-delay: 1s;
-        }
+        .dot-flashing::before { left: -15px; animation-delay: 0s; }
+        .dot-flashing::after { left: 15px; animation-delay: 1s; }
         @keyframes dot-flashing {
             0% { background-color: #d46a8f; }
             50%, 100% { background-color: #ffd9e6; }
@@ -105,7 +79,6 @@
         const auth = firebase.auth();
         const db = firebase.firestore();
         const appId = "my-vocab-app-6935a";
-        const apiKey = ""; // 執行環境會自動提供
 
         const Icons = {
             Search: ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>,
@@ -121,8 +94,9 @@
         };
 
         const callGemini = async (prompt, systemPrompt = "") => {
+            const currentApiKey = typeof apiKey !== 'undefined' ? apiKey : "";
             const model = "gemini-2.5-flash-preview-09-2025";
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${currentApiKey}`;
             
             let retries = 0;
             const maxRetries = 5;
@@ -138,13 +112,17 @@
                         })
                     });
                     
-                    if (!response.ok) throw new Error("API Response Error");
+                    if (!response.ok) {
+                        const errData = await response.json();
+                        throw new Error(errData.error?.message || "API Error");
+                    }
                     
                     const data = await response.json();
                     return data.candidates?.[0]?.content?.parts?.[0]?.text || "AI 忙碌中，請稍後再試。";
                 } catch (error) {
+                    console.error("Gemini Error:", error);
                     retries++;
-                    if (retries === maxRetries) return "AI 連線失敗，請檢查網路後再試。";
+                    if (retries === maxRetries) return `連線失敗: ${error.message}`;
                     await new Promise(r => setTimeout(r, Math.pow(2, retries) * 1000));
                 }
             }
@@ -221,7 +199,20 @@
                 }
             }, []);
 
-            // --- 單字測驗 ---
+            // --- 單字功能 ---
+            const playPronunciation = (word) => {
+                const utterance = new SpeechSynthesisUtterance(word);
+                utterance.lang = 'en-US';
+                window.speechSynthesis.speak(utterance);
+            };
+
+            const deleteWord = async (id, e) => {
+                e.stopPropagation();
+                if (confirm("確定要刪除這個單字嗎？")) {
+                    await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('my-room').doc(id).delete();
+                }
+            };
+
             const startQuiz = () => {
                 if (words.length === 0) return;
                 setQuizMode(true);
@@ -247,33 +238,34 @@
                 setCurrentExam("");
                 
                 const systemPrompt = "You are an IELTS Speaking Examiner. Provide high-quality Speaking Part 2 prompts.";
-                const prompt = "Generate a new IELTS Speaking Part 2 prompt. Include the main topic and 4 bullet points. Format it clearly.";
+                const prompt = "Please generate a unique IELTS Speaking Part 2 prompt right now. Include the main topic and exactly 4 bullet points. Format it clearly for a mobile app screen.";
                 
-                const exam = await callGemini(prompt, systemPrompt);
-                setCurrentExam(exam);
-                setLoading(false);
-                updateVideoRecs(exam);
-            };
-
-            const startCountdown = () => {
-                setTimeLeft(120);
-                if (timerRef.current) clearInterval(timerRef.current);
-                timerRef.current = setInterval(() => {
-                    setTimeLeft(prev => {
-                        if (prev <= 1) {
-                            clearInterval(timerRef.current);
-                            return 0;
-                        }
-                        return prev - 1;
-                    });
-                }, 1000);
+                try {
+                    const exam = await callGemini(prompt, systemPrompt);
+                    setCurrentExam(exam);
+                    updateVideoRecs(exam);
+                } catch (e) {
+                    setCurrentExam("目前無法取得題目，請確認網路連線。");
+                } finally {
+                    setLoading(false);
+                }
             };
 
             const toggleRecording = () => {
                 if (!isRecording) {
                     recognitionRef.current?.start();
                     setIsRecording(true);
-                    startCountdown();
+                    setTimeLeft(120);
+                    if (timerRef.current) clearInterval(timerRef.current);
+                    timerRef.current = setInterval(() => {
+                        setTimeLeft(prev => {
+                            if (prev <= 1) {
+                                clearInterval(timerRef.current);
+                                return 0;
+                            }
+                            return prev - 1;
+                        });
+                    }, 1000);
                 } else {
                     recognitionRef.current?.stop();
                     setIsRecording(false);
@@ -286,7 +278,7 @@
                 setLoading(true);
                 setSpeakingStep('reviewing');
                 const systemPrompt = "You are an expert IELTS Tutor. Provide detailed feedback in Traditional Chinese.";
-                const prompt = `Review my IELTS Part 2 answer.\nQuestion: ${currentExam}\nTranscript: ${transcript}\nProvide Band Score, Fluency/Vocab/Grammar feedback, and 3 native improvements.`;
+                const prompt = `Review my IELTS Part 2 answer.\nQuestion: ${currentExam}\nTranscript: ${transcript}\nProvide Band Score (Estimated), Fluency/Vocab/Grammar feedback, and 3 specific native-like sentence improvements.`;
                 
                 const feedback = await callGemini(prompt, systemPrompt);
                 setAiFeedback(feedback);
@@ -301,30 +293,12 @@
             };
 
             const updateVideoRecs = async (topic) => {
-                const prompt = `Based on this topic: "${topic}", recommend 3 specific search keywords for YouTube to learn related vocabulary.`;
+                const prompt = `Based on this topic: "${topic}", recommend 3 specific search keywords for YouTube to learn related vocabulary. Just list them.`;
                 const recs = await callGemini(prompt);
                 setVideoRecommendations(recs);
             };
 
             // --- 筆記管理 ---
-            const deleteFolder = async (id, e) => {
-                e.stopPropagation();
-                if (confirm("確定要刪除整個資料夾嗎？")) {
-                    await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('notes-folders').doc(id).delete();
-                    if (currentFolder?.id === id) setCurrentFolder(null);
-                }
-            };
-
-            const deleteNote = async (folderId, noteId) => {
-                if (confirm("確定要刪除這則筆記嗎？")) {
-                    const folder = folders.find(f => f.id === folderId);
-                    const newNotes = folder.notes.filter(n => n.id !== noteId);
-                    await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('notes-folders').doc(folderId).update({
-                        notes: newNotes
-                    });
-                }
-            };
-
             const addFolder = async (name) => {
                 if (!name) return;
                 await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('notes-folders').add({
@@ -345,7 +319,7 @@
 
             const formatContent = (content) => {
                 let html = content.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
-                html = html.replace(/\[r\](.*?)\[\/r\]/g, '<span class="red-text">$1</span>');
+                html = html.replace(/\[r\](.*?)\[\/r\]/g, '<span class="text-red-500 font-bold">$1</span>');
                 return html;
             };
 
@@ -396,7 +370,7 @@
                                         {showQuizAnswer ? (
                                             <div className="animate-in zoom-in duration-300">
                                                 <p className="text-2xl font-bold text-[#d46a8f] mb-2">{words[currentQuizIndex].meaning}</p>
-                                                <p className="text-sm text-slate-400 italic">{words[currentQuizIndex].note || "無筆記"}</p>
+                                                {words[currentQuizIndex].example && <p className="text-sm text-slate-500 italic mt-2">{words[currentQuizIndex].example}</p>}
                                             </div>
                                         ) : (
                                             <button onClick={() => setShowQuizAnswer(true)} className="px-8 py-3 bg-[#FFD9E6] text-[#d46a8f] rounded-full font-bold">顯示答案</button>
@@ -421,12 +395,17 @@
                                     </div>
                                     {filteredWords.map(w => (
                                         <div key={w.id} onClick={() => {const s=new Set(expandedIds); if(s.has(w.id)) s.delete(w.id); else s.add(w.id); setExpandedIds(s);}}
-                                            className={`bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 transition-all ${expandedIds.has(w.id) ? 'ring-2 ring-[#FFD9E6] expanded' : ''}`}
+                                            className={`relative bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 transition-all ${expandedIds.has(w.id) ? 'ring-2 ring-[#FFD9E6] expanded' : ''}`}
                                         >
-                                            <h3 className="text-xl font-black text-slate-800">{w.word}</h3>
+                                            <button onClick={(e) => deleteWord(w.id, e)} className="absolute top-4 right-4 text-slate-300 hover:text-red-400 transition-colors p-2"><Icons.Trash size={18} /></button>
+                                            <div className="flex items-center gap-3">
+                                                <h3 className="text-xl font-black text-slate-800">{w.word}</h3>
+                                                <button onClick={(e) => { e.stopPropagation(); playPronunciation(w.word); }} className="text-[#d46a8f] hover:scale-110 transition-transform"><Icons.Volume size={18} /></button>
+                                            </div>
                                             <div className="expand-content">
                                                 <p className="mt-4 text-[#d46a8f] font-bold text-lg border-t border-slate-50 pt-4">{w.meaning}</p>
-                                                {w.note && <p className="mt-2 text-slate-500 italic text-sm bg-slate-50 p-3 rounded-xl">{w.note}</p>}
+                                                {w.example && <p className="mt-2 text-slate-500 italic text-sm bg-slate-50 p-3 rounded-xl">Example: {w.example}</p>}
+                                                {w.note && <p className="mt-2 text-slate-400 text-xs px-1">Note: {w.note}</p>}
                                             </div>
                                         </div>
                                     ))}
@@ -468,7 +447,7 @@
 
                                         {speakingStep === 'practicing' && (
                                             <div className="space-y-4">
-                                                <div className="bg-white p-6 rounded-[2rem] shadow-sm border-2 border-[#FFD9E6] min-h-[150px] flex flex-col justify-center">
+                                                <div className="bg-white p-6 rounded-[2rem] shadow-sm border-2 border-[#FFD9E6] min-h-[180px] flex flex-col justify-center">
                                                     <h3 className="text-xs font-black text-[#d46a8f] uppercase mb-4 flex items-center gap-2"><Icons.Clock size={14} /> Exam Card</h3>
                                                     {loading ? (
                                                         <div className="flex justify-center items-center h-20"><div className="dot-flashing"></div></div>
@@ -477,7 +456,7 @@
                                                     )}
                                                 </div>
 
-                                                <div className="bg-[#1e293b] p-6 rounded-[2rem] text-white space-y-4">
+                                                <div className="bg-[#1e293b] p-6 rounded-[2rem] text-white space-y-4 shadow-xl">
                                                     <div className="flex justify-between items-center">
                                                         <div className="flex items-center gap-2">
                                                             <div className={`w-3 h-3 rounded-full ${isRecording ? 'bg-red-500 animate-pulse' : 'bg-slate-600'}`}></div>
@@ -487,7 +466,7 @@
                                                         </div>
                                                         <span className="text-xs font-bold text-slate-400">即時轉譯</span>
                                                     </div>
-                                                    <div className="min-h-[100px] text-lg font-medium italic text-slate-300">{transcript || "點擊按鈕開始錄製..."}</div>
+                                                    <div className="min-h-[100px] text-lg font-medium italic text-slate-300 leading-snug">{transcript || "點擊按鈕開始錄製..."}</div>
                                                     <div className="flex justify-center">
                                                         <button onClick={toggleRecording} className={`p-8 rounded-full transition-all ${isRecording ? 'bg-red-500 animate-pulse-red shadow-[0_0_20px_rgba(239,68,68,0.4)]' : 'bg-[#FFD9E6] text-[#d46a8f]'}`}>
                                                             <Icons.Mic size={32} />
@@ -512,7 +491,7 @@
                                                     ) : (
                                                         <div className="whitespace-pre-wrap text-sm text-slate-600 leading-relaxed animate-in slide-in-from-top-4">{aiFeedback || "無分析資料。"}</div>
                                                     )}
-                                                    {!loading && <button onClick={() => setSpeakingStep('idle')} className="mt-6 w-full py-3 bg-slate-100 text-slate-500 rounded-xl font-bold">返回</button>}
+                                                    {!loading && <button onClick={() => setSpeakingStep('idle')} className="mt-6 w-full py-3 bg-slate-100 text-slate-500 rounded-xl font-bold">返回練習區</button>}
                                                 </div>
                                             </div>
                                         )}
@@ -537,7 +516,6 @@
                                     <div className="grid grid-cols-2 gap-4">
                                         {folders.map(f => (
                                             <div key={f.id} onClick={() => setCurrentFolder(f)} className="relative group bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 text-center space-y-2 cursor-pointer transition-all hover:ring-2 hover:ring-[#FFD9E6]">
-                                                <button onClick={(e) => deleteFolder(f.id, e)} className="absolute top-4 right-4 text-slate-300 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"><Icons.Trash /></button>
                                                 <div className="text-[#d46a8f] mx-auto w-fit"><Icons.Folder size={40} /></div>
                                                 <p className="font-bold text-slate-700 truncate px-2">{f.name}</p>
                                                 <p className="text-[10px] text-slate-400">{(f.notes || []).length} 則內容</p>
@@ -548,9 +526,8 @@
                                     <div className="space-y-4">
                                         {(currentFolder.notes || []).map(note => (
                                             <div key={note.id} className="relative group bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
-                                                <button onClick={() => deleteNote(currentFolder.id, note.id)} className="absolute top-4 right-4 text-slate-300 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"><Icons.Trash /></button>
                                                 <h4 className="font-black text-lg text-slate-800 mb-2 pr-8">{note.title}</h4>
-                                                <div className="text-slate-600 text-sm leading-relaxed note-content" dangerouslySetInnerHTML={{ __html: formatContent(note.content) }} />
+                                                <div className="text-slate-600 text-sm leading-relaxed" dangerouslySetInnerHTML={{ __html: formatContent(note.content) }} />
                                             </div>
                                         ))}
                                     </div>
@@ -564,11 +541,11 @@
                                 <div className="bg-white p-8 rounded-[3rem] shadow-sm border border-slate-100">
                                     <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-4"><Icons.Youtube size={32} /></div>
                                     <h2 className="text-xl font-black mb-2">AI 學習推薦</h2>
-                                    <p className="text-slate-400 text-sm mb-6">根據您的題目，推薦 YouTube 關鍵字。</p>
-                                    <div className="bg-slate-50 p-6 rounded-2xl text-slate-700 whitespace-pre-wrap text-sm italic min-h-[100px] flex items-center">
+                                    <p className="text-slate-400 text-sm mb-6">根據您最近練習的題目，推薦 YouTube 搜尋關鍵字。</p>
+                                    <div className="bg-slate-50 p-6 rounded-2xl text-slate-700 whitespace-pre-wrap text-sm italic min-h-[100px] flex items-center leading-relaxed">
                                         {videoRecommendations || "完成一場口說練習後將顯示推薦。"}
                                     </div>
-                                    <a href="https://www.youtube.com/results?search_query=IELTS+Speaking+Lesson" target="_blank" className="mt-6 block w-full py-4 bg-red-500 text-white rounded-2xl font-black text-center shadow-lg shadow-red-100">探索更多</a>
+                                    <a href="https://www.youtube.com/results?search_query=IELTS+Speaking+Practice" target="_blank" className="mt-6 block w-full py-4 bg-red-500 text-white rounded-2xl font-black text-center shadow-lg shadow-red-100">探索更多</a>
                                 </div>
                             </section>
                         )}
@@ -586,7 +563,6 @@
                     {isAddingNote && (
                         <Modal onClose={() => setIsAddingNote(false)} title="新增筆記">
                             <div className="space-y-3">
-                                <p className="text-[10px] text-slate-400 italic">支援 Markdown 粗體 (**文字**) 與 [r]紅字[/r]</p>
                                 <input id="note-title-input" type="text" placeholder="標題..." className="w-full p-4 bg-slate-50 rounded-2xl outline-none focus:ring-2 focus:ring-[#FFD9E6]" />
                                 <textarea id="note-content-input" placeholder="內容..." className="w-full p-4 bg-slate-50 rounded-2xl outline-none focus:ring-2 focus:ring-[#FFD9E6] h-40"></textarea>
                                 <button onClick={() => addNoteToFolder(currentFolder.id, document.getElementById('note-title-input').value, document.getElementById('note-content-input').value)} className="w-full py-4 bg-[#FFD9E6] text-[#d46a8f] rounded-2xl font-black">儲存</button>
